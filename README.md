@@ -10,8 +10,7 @@
   <a href="https://github.com/withfig/autocomplete/pull/2105"><img src="https://img.shields.io/badge/Fig-fff?logo=fig&logoColor=black" /></a>
   <br>
   <img src="https://img.shields.io/badge/Press_★_to_pay_respects-fff?logo=github&logoColor=black" />
-  <img title="Views since 30.11.2023 + 6k after migration" src="https://komarev.com/ghpvc/?username=swiftyfinch-rugby&label=Views&format=true&base=6000">
-  <a href="https://twitter.com/swiftyfinch"><img src="https://img.shields.io/badge/SwiftyFinch-blue?logo=twitter&logoColor=white" /></a>
+  <!-- Removed SwiftyFinch specific views badge and Twitter badge -->
 </h1>
 
 <h1></h1>
@@ -60,7 +59,7 @@ Then call `where rugby` command and be sure that there are no any of paths to ru
 ### First Install
 
 ```sh
-curl -Ls https://swiftyfinch.github.io/rugby/install.sh | bash
+curl -Ls https://raw.githubusercontent.com/thorprogramador/rugby-ios/main/releases/install.sh | bash
 ```
 
 ### Self-Update
@@ -123,11 +122,11 @@ For advanced usage, please read the documentation below.
 
 ## 🤝 Contribution
 
-Feel free [to open a pull request](https://github.com/swiftyfinch/rugby/contribute) or [a discussion](https://github.com/swiftyfinch/Rugby/discussions).
+Feel free [to open a pull request](https://github.com/thorprogramador/rugby-ios/contribute) or [a discussion](https://github.com/thorprogramador/rugby-ios/discussions).
 
 | Known Issues 🐞 |
 | :--- |
-| [#394](https://github.com/swiftyfinch/Rugby/discussions/394): Unable to run tests via Xcode (via `make test` they run perfectly) |
+| [#394](https://github.com/thorprogramador/rugby-ios/discussions/394): Unable to run tests via Xcode (via `make test` they run perfectly) |
 | [#270](https://github.com/cpisciotta/xcbeautify/issues/270): Missing public `OutputType` |
 
 ## 📮 Support
