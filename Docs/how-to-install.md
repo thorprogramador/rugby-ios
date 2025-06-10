@@ -38,34 +38,14 @@ Then call `where rugby` command and be sure that there are no any of paths to ru
 
 #### Running script (Recommended) 🚀
 
+For the official SwiftyFinch version:
 ```sh
 curl -Ls https://swiftyfinch.github.io/rugby/install.sh | bash
 ```
 
-#### Manually 🧐
-
-Select your architecture: `arm64` or `x86_64`. Run five commands below. I described them in points 1-5:
-
-1. Create and change the current directory to `~/.rugby/clt/downloads` (recommended);
-2. Download the specific version of Rugby. E.g. `2.0.0`;
-3. Unzip archive;
-4. Copy binary from `~/.rugby/clt/downloads/rugby` to `~/.rugby/clt`;
-5. Add Rugby path to your `$PATH` environment variable. After this call you can use `rugby` in your\
-terminal without passing the whole path `~/.rugby/clt`. You need to open a new window or tab in terminal.
-
-```bash
-mkdir -p ~/.rugby/clt/downloads && cd ~/.rugby/clt/downloads
-```
-
-<details><summary><code>x86_64 (Intel)</code></summary>
-<p>
-
-```bash
-curl -LO https://github.com/swiftyfinch/Rugby/releases/download/2.0.0/x86_64.zip
-```
-
-```bash
-unzip x86_64.zip
+For the `thorprogramador/rugby-ios` fork (ensure the `RELEASE_TAG` in the script points to a valid release with assets on this fork):
+```sh
+curl -Ls https://raw.githubusercontent.com/thorprogramador/rugby-ios/main/releases/install.sh | bash
 ```
 
 <hr>
