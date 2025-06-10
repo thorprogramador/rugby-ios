@@ -7,7 +7,7 @@ struct Build: AsyncParsableCommand {
         commandName: "build",
         abstract: "Build targets from Pods project.",
         discussion: Links.commandsHelp("build.md"),
-        subcommands: [Build.Full.self, Build.Pre.self],
+        subcommands: [Build.Full.self, Build.Pre.self, Build.Rebuild.self],
         defaultSubcommand: Build.Full.self
     )
 }

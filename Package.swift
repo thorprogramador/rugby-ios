@@ -41,6 +41,8 @@ let package = Package(
             "ZIPFoundation",
             "Fish",
             "PLzmaSDK"
+        ], resources: [
+            .copy("rugby-s3-uploader.rb")
         ]),
         .testTarget(name: "FoundationTests", dependencies: ["RugbyFoundation"])
     ]

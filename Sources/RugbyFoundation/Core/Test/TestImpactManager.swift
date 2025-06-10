@@ -8,8 +8,10 @@ public protocol ITestImpactManager: AnyObject {
     /// - Parameters:
     ///   - targetsOptions: A set of options to to select targets.
     ///   - options: Xcode build options.
+    ///   - baseCommit: Optional base commit to compare changes against (e.g., develop, main, or a specific commit hash).
     func impact(targetsOptions: TargetsOptions,
-                buildOptions: XcodeBuildOptions) async throws
+                buildOptions: XcodeBuildOptions,
+                baseCommit: String?) async throws
 
     /// Marks test targets as passed.
     /// - Parameters:
@@ -32,6 +34,9 @@ final class TestImpactManager: Loggable {
     private let testsStorage: ITestsStorage
     private let git: IGit
     private let targetsPrinter: ITargetsPrinter
+    
+    // Relevant file extensions for impact analysis
+    private let relevantExtensions = [".swift", ".h", ".m", ".mm", ".c", ".cpp", ".podspec", ".xcconfig"]
 
     init(logger: ILogger,
          environmentCollector: IEnvironmentCollector,
@@ -58,10 +63,130 @@ protocol IInternalTestImpactManager: ITestImpactManager {
                           quiet: Bool) async throws -> TargetsMap
     func missingTargets(targetsOptions: TargetsOptions,
                         buildOptions: XcodeBuildOptions,
+                        baseCommit: String?,
                         quiet: Bool) async throws -> TargetsMap
 }
 
 extension TestImpactManager: IInternalTestImpactManager {
+    /// Finds impacted tests based on changes between the base commit and HEAD
+    /// - Parameters:
+    ///   - targets: Map of available test targets
+    ///   - baseCommit: Base commit to compare against (e.g., develop, main, or a specific hash)
+    ///   - buildOptions: Xcode build options
+    ///   - quiet: If true, reduces log output
+    /// - Returns: Map of impacted test targets
+    private func findImpactedTestsFromBaseCommit(
+        targets: TargetsMap,
+        baseCommit: String,
+        buildOptions: XcodeBuildOptions,
+        quiet: Bool
+    ) async throws -> TargetsMap {
+        // Get changed files since the base commit
+        let changedFiles = try await log(
+            "Finding Changed Files from \(baseCommit)",
+            level: quiet ? .info : .compact,
+            auto: try git.changedFiles(from: baseCommit)
+        )
+        
+        if changedFiles.isEmpty {
+            await log("No Changed Files Found", level: quiet ? .info : .compact)
+            return [:]
+        }
+        
+        // Filter only relevant files (source code, podspecs, etc.)
+        let relevantChangedFiles = changedFiles.filter { file in
+            relevantExtensions.contains { file.hasSuffix($0) }
+        }
+        
+        if relevantChangedFiles.isEmpty {
+            await log("No Relevant Changed Files Found", level: quiet ? .info : .compact)
+            return [:]
+        }
+        
+        await log("Found \(relevantChangedFiles.count) Changed Files", level: quiet ? .info : .compact) {
+            for file in relevantChangedFiles.sorted() {
+                await log("\(file)", level: quiet ? .info : .info)
+            }
+        }
+        
+        // Determine which targets are affected by the changes
+        let impactedTargets = try await determineImpactedTargets(targets: targets, changedFiles: relevantChangedFiles, quiet: quiet)
+        
+        if impactedTargets.isEmpty {
+            await log("No Test Targets Impacted", level: quiet ? .info : .compact)
+            return [:]
+        }
+        
+        await log("Impacted Test Targets (\(impactedTargets.count))", level: quiet ? .info : .compact) {
+            for target in impactedTargets.caseInsensitiveSortedByName() {
+                await log("\(target.name)", level: quiet ? .info : .result)
+            }
+        }
+        
+        return impactedTargets
+    }
+    
+    /// Determines which test targets are impacted by changed files
+    /// - Parameters:
+    ///   - targets: Map of available test targets
+    ///   - changedFiles: List of changed files
+    ///   - quiet: If true, reduces log output
+    /// - Returns: Map of impacted test targets
+    private func determineImpactedTargets(
+        targets: TargetsMap,
+        changedFiles: [String],
+        quiet: Bool
+    ) async throws -> TargetsMap {
+        var impactedTargets = TargetsMap()
+        let podspecChanges = changedFiles.filter { $0.hasSuffix(".podspec") }
+        
+        // If there are podspec changes, all tests that depend on those pods are impacted
+        if !podspecChanges.isEmpty {
+            await log("Found Podspec Changes", level: quiet ? .info : .compact)
+            
+            // Extract pod names from podspec files
+            let changedPods = podspecChanges.compactMap { file -> String? in
+                let filename = URL(fileURLWithPath: file).lastPathComponent
+                guard filename.hasSuffix(".podspec") else { return nil }
+                return String(filename.dropLast(8)) // Remove ".podspec"
+            }
+            
+            // Add all test targets that depend on the changed pods
+            for target in targets.values where target.isTests {
+                let dependencies = target.explicitDependencies
+                
+                for pod in changedPods {
+                    if dependencies.contains(where: { $0.key.lowercased() == pod.lowercased() }) {
+                        impactedTargets[target.uuid] = target
+                        break
+                    }
+                }
+            }
+        }
+        
+        // For source code file changes, we need to analyze which targets contain those files
+        let sourceChanges = changedFiles.filter { file in
+            file.hasSuffix(".swift") || file.hasSuffix(".h") || file.hasSuffix(".m") || 
+            file.hasSuffix(".mm") || file.hasSuffix(".c") || file.hasSuffix(".cpp")
+        }
+        
+        if !sourceChanges.isEmpty && impactedTargets.count < targets.count {
+            // Here we would need to analyze each target to see if it contains the changed files
+            // For simplicity, if there are source file changes and we couldn't determine exactly which targets
+            // are affected, we mark all targets as impacted
+            // In a more sophisticated implementation, we could analyze the file structure of each target
+            
+            // For now, if we already have targets impacted by podspec changes, we only use those
+            // Otherwise, we consider all targets as impacted
+            if impactedTargets.isEmpty {
+                await log("Source File Changes Detected - Marking All Test Targets as Impacted", level: quiet ? .info : .compact)
+                impactedTargets = targets
+            }
+        }
+        
+        return impactedTargets
+    }
+    
     func fetchTestTargets(targetsOptions: TargetsOptions,
                           buildOptions: XcodeBuildOptions,
                           quiet: Bool) async throws -> TargetsMap {
@@ -83,19 +208,28 @@ extension TestImpactManager: IInternalTestImpactManager {
 
     func missingTargets(targetsOptions: TargetsOptions,
                         buildOptions: XcodeBuildOptions,
+                        baseCommit: String?,
                         quiet: Bool) async throws -> TargetsMap {
         let targets = try await fetchTestTargets(
             targetsOptions: targetsOptions,
             buildOptions: buildOptions,
             quiet: quiet
         )
-        return try await testsStorage.findMissingTests(of: targets, buildOptions: buildOptions)
+        
+        if let baseCommit = baseCommit {
+            // Si se proporciona un commit base, utilizamos ese commit para determinar los cambios
+            return try await findImpactedTestsFromBaseCommit(targets: targets, baseCommit: baseCommit, buildOptions: buildOptions, quiet: quiet)
+        } else {
+            // Comportamiento original: usar el almacenamiento de pruebas para encontrar pruebas faltantes
+            return try await testsStorage.findMissingTests(of: targets, buildOptions: buildOptions)
+        }
     }
 }
 
 extension TestImpactManager: ITestImpactManager {
     func impact(targetsOptions: TargetsOptions,
-                buildOptions: XcodeBuildOptions) async throws {
+                buildOptions: XcodeBuildOptions,
+                baseCommit: String? = nil) async throws {
         try await environmentCollector.logXcodeVersion()
         guard try await !rugbyXcodeProject.isAlreadyUsingRugby() else { throw RugbyError.alreadyUseRugby }
 
@@ -108,7 +242,12 @@ extension TestImpactManager: ITestImpactManager {
             return await targetsPrinter.print(targets)
         }
 
-        let missingTestTargets = try await testsStorage.findMissingTests(of: targets, buildOptions: buildOptions)
+        let missingTestTargets = try await missingTargets(
+            targetsOptions: targetsOptions,
+            buildOptions: buildOptions,
+            baseCommit: baseCommit,
+            quiet: false
+        )
         guard !missingTestTargets.isEmpty else {
             await log("No Affected Test Targets")
             return

@@ -66,6 +66,12 @@ extension BuildTargetsManager: IBuildTargetsManager {
     func filterTargets(_ targets: TargetsMap, includingTests: Bool) -> TargetsMap {
         targets.filter { _, target in
             guard target.isNative, !target.isPodsUmbrella, !target.isApplication else { return false }
+            
+            // Exclude targets from dev_modules folder (development/testing modules)
+            if target.name.contains("dev_modules") || target.name.hasPrefix("dev_modules") {
+                return false
+            }
+            
             return includingTests || !target.isTests
         }
     }

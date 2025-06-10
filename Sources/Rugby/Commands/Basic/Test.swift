@@ -27,6 +27,9 @@ private extension Test {
         @Flag(name: .long, help: "Select tests by impact.")
         var impact = false
 
+        @Option(name: .long, help: "Base commit to compare changes against (e.g., develop, main, or a specific commit hash).")
+        var baseCommit: String?
+
         @Flag(name: .long, help: "Mark test targets as passed if all tests are succeed.")
         var pass = false
 
@@ -54,6 +57,7 @@ private extension Test {
                 testplanTemplatePath: testplanTemplatePath,
                 simulatorName: simulatorName,
                 byImpact: impact,
+                baseCommit: baseCommit,
                 markPassed: pass
             )
         }
@@ -67,6 +71,9 @@ private extension Test {
             abstract: "\("(Experimental)".yellow) Print affected test targets.",
             discussion: Links.commandsHelp("test/impact.md")
         )
+        
+        @Option(name: .long, help: "Base commit to compare changes against (e.g., develop, main, or a specific commit hash).")
+        var baseCommit: String?
 
         @OptionGroup
         var buildOptions: BuildOptions
@@ -83,7 +90,8 @@ private extension Test {
         func body() async throws {
             try await dependencies.testImpactManager().impact(
                 targetsOptions: buildOptions.targetsOptions.foundation(),
-                buildOptions: buildOptions.xcodeBuildOptions()
+                buildOptions: buildOptions.xcodeBuildOptions(),
+                baseCommit: baseCommit
             )
         }
     }

@@ -7,7 +7,7 @@ struct Shortcuts: AsyncParsableCommand {
         commandName: "shortcuts",
         abstract: "Set of base commands combinations.",
         discussion: Links.commandsHelp("shortcuts.md"),
-        subcommands: [Umbrella.self, Cache.self],
+        subcommands: [Umbrella.self, Cache.self, RebuildCache.self],
         defaultSubcommand: Umbrella.self
     )
 }
@@ -106,6 +106,73 @@ extension Shortcuts {
 
 extension Shortcuts.Cache: RunnableCommand {
     func body() async throws {
+        do {
+            // Check if the project is already using Rugby
+            // Check if the project is already using Rugby by using the buildManager
+            // The buildManager.build method throws RugbyError.alreadyUseRugby if the project is already using Rugby
+            let buildManager = dependencies.buildManager()
+            
+            // Try to check if project is using Rugby - if it throws alreadyUseRugby error, then it is
+            var isUsingRugby = false
+            do {
+                // Just create a dummy task that would fail if project is using Rugby
+                try await buildManager.build(
+                    targetsOptions: RugbyFoundation.TargetsOptions(),
+                    options: RugbyFoundation.XcodeBuildOptions(
+                        sdk: .sim,
+                        config: "Debug",
+                        arch: "arm64",
+                        xcargs: [],
+                        resultBundlePath: nil
+                    ),
+                    paths: try dependencies.xcode.paths(),
+                    ignoreCache: false
+                )
+            } catch let error where error.localizedDescription.contains("already using") {
+                isUsingRugby = true
+            } catch {
+                // Other errors are not relevant for our check
+            }
+            
+            if isUsingRugby && !rollback {
+                await log("Project is already using Rugby. Switching to rebuild-cache mode.", level: .info)
+                
+                // Instead of directly executing the RebuildCache command, we run
+                // the same commands that RebuildCache uses but in our context
+                var runnableCommands: [(name: String, RunnableCommand)] = []
+                
+                // Configure the Rebuild command (equivalent to Build.Rebuild in RebuildCache)
+                var rebuild = Build.Rebuild()
+                rebuild.buildOptions = buildOptions
+                rebuild.ignoreCache = ignoreCache
+                rebuild.resultBundlePath = resultBundlePath
+                rebuild.commonOptions = commonOptions
+                runnableCommands.append(("Rebuild", rebuild))
+                
+                // Configure the Use command (same as in RebuildCache)
+                var use = Use()
+                use.deleteSources = deleteSources
+                use.targetsOptions = buildOptions.targetsOptions
+                use.additionalBuildOptions = buildOptions.additionalBuildOptions
+                use.commonOptions = commonOptions
+                runnableCommands.append(("Use", use))
+                
+                // Execute the commands
+                for (name, command) in runnableCommands {
+                    try await log(name.green) {
+                        try await command.body()
+                    }
+                }
+                
+                return
+            }
+        } catch {
+            // If there's an error checking Rugby status, continue with normal flow
+            // but log the error for diagnostics
+            await log("Error checking if project is using Rugby: \(error). Continuing with normal cache flow.", level: .info)
+        }
+        
+        // Normal cache flow if project is not using Rugby
         var runnableCommands: [(name: String, RunnableCommand)] = []
 
         if rollback {

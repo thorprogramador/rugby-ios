@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Colores para la salida
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}Rugby Cache Modificado${NC}"
+echo -e "${YELLOW}Este comando detecta si el proyecto ya está usando Rugby y ejecuta rebuild-cache en lugar de fallar${NC}"
+
+# Verificar si el proyecto ya está usando Rugby
+if rugby xcodeproj is-using-rugby &> /dev/null; then
+  echo -e "${GREEN}✅ Proyecto ya está usando Rugby. Ejecutando rebuild-cache...${NC}"
+  rugby shortcuts rebuild-cache "$@"
+else
+  echo -e "${YELLOW}Proyecto no está usando Rugby. Ejecutando cache normal...${NC}"
+  rugby cache "$@"
+fi
+
+echo -e "${BLUE}Comando completado${NC}"
