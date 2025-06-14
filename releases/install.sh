@@ -6,15 +6,15 @@
 # Ensure these are correct for your repository and desired release
 GITHUB_USER="thorprogramador"
 GITHUB_REPO="rugby-ios"
-RELEASE_TAG="3.0.21" # IMPORTANT: Update this tag for new releases!
+RELEASE_TAG="3.0.22" # IMPORTANT: Update this tag for new releases!
 BINARY_NAME="rugby"
 DOWNLOAD_URL="https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/$RELEASE_TAG/$BINARY_NAME"
 
 echo "🚀 Rugby Installer for $GITHUB_USER/$GITHUB_REPO, version $RELEASE_TAG"
-echo "Binary name: $BINARY_NAME"
+echo "Binary name: $BINARY_NAME (Universal Binary - supports both x86_64 and arm64)"
 
 # --- Download the binary ---
-echo "📥 Downloading Rugby binary from $DOWNLOAD_URL..."
+echo "📥 Downloading Rugby universal binary from $DOWNLOAD_URL..."
 TMP_DIR=$(mktemp -d)
 if [ -z "$TMP_DIR" ]; then
     echo "❌ Error: Failed to create a temporary directory."
@@ -48,11 +48,19 @@ fi
 echo "🔧 Making the downloaded binary executable..."
 chmod +x "./$BINARY_NAME"
 
+# Verify binary architecture compatibility
+echo "🔍 Verifying binary architecture compatibility..."
+CURRENT_ARCH=$(uname -m)
+if command -v lipo &> /dev/null; then
+    echo "Binary architectures: $(lipo -info "./$BINARY_NAME" 2>/dev/null || echo "Unable to determine")"
+fi
+echo "Current system architecture: $CURRENT_ARCH"
+
 # Verify that the downloaded binary works
 echo "🔍 Verifying that the binary works..."
 if ! ./$BINARY_NAME --version >/dev/null 2>&1; then
   echo "❌ Error: The binary '$BINARY_NAME' does not seem to function correctly."
-  echo "   Verify it is compatible with your system ($(uname -m))."
+  echo "   Verify it is compatible with your system ($CURRENT_ARCH)."
   popd > /dev/null
   exit 1
 fi

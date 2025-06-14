@@ -11,7 +11,9 @@ RELEASE_DIR="$PROJECT_ROOT_DIR/releases"
 RUGBY_BINARY_NAME="rugby"
 INSTALL_SCRIPT_SOURCE="$PROJECT_ROOT_DIR/install-prebuilt-rugby.sh"
 INSTALL_SCRIPT_DESTINATION="$RELEASE_DIR/install.sh"
-BUILT_BINARY_PATH="$PROJECT_ROOT_DIR/.build/releases/$RUGBY_BINARY_NAME"
+BUILT_BINARY_PATH_X86="$PROJECT_ROOT_DIR/.build/x86_64-apple-macosx/release/$RUGBY_BINARY_NAME"
+BUILT_BINARY_PATH_ARM="$PROJECT_ROOT_DIR/.build/arm64-apple-macosx/release/$RUGBY_BINARY_NAME"
+UNIVERSAL_BINARY_PATH="$RELEASE_DIR/$RUGBY_BINARY_NAME"
 
 echo "🚀 Starting the release packaging process..."
 
@@ -19,26 +21,39 @@ echo "🚀 Starting the release packaging process..."
 echo "📂 Creating release directory: $RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
 
-# 2. Build the rugby binary in release mode
-echo "🛠️  Building Rugby binary in release mode (swift build -c release --product rugby)..."
-swift build -c release --product rugby
+# 2. Build the rugby binary for x86_64 architecture
+echo "🛠️  Building Rugby binary for x86_64 architecture..."
+swift build -c release --product rugby --arch x86_64
 if [ $? -ne 0 ]; then
-  echo "❌ Error: Swift build failed."
+  echo "❌ Error: Swift build failed for x86_64."
   exit 1
 fi
-echo "✅ Rugby binary built successfully."
+echo "✅ Rugby binary built successfully for x86_64."
 
-# 3. Copy the built rugby binary to the release folder
-echo "📦 Copying Rugby binary to $RELEASE_DIR/$RUGBY_BINARY_NAME..."
-cp "$BUILT_BINARY_PATH" "$RELEASE_DIR/$RUGBY_BINARY_NAME"
+# 3. Build the rugby binary for arm64 architecture
+echo "🛠️  Building Rugby binary for arm64 architecture..."
+swift build -c release --product rugby --arch arm64
 if [ $? -ne 0 ]; then
-  echo "❌ Error: Failed to copy Rugby binary."
+  echo "❌ Error: Swift build failed for arm64."
   exit 1
 fi
-chmod +x "$RELEASE_DIR/$RUGBY_BINARY_NAME"
-echo "✅ Rugby binary copied and made executable."
+echo "✅ Rugby binary built successfully for arm64."
 
-# 4. Generate the install.sh script with GitHub download logic
+# 4. Create universal binary using lipo
+echo "🔗 Creating universal binary with lipo..."
+lipo -create "$BUILT_BINARY_PATH_X86" "$BUILT_BINARY_PATH_ARM" -output "$UNIVERSAL_BINARY_PATH"
+if [ $? -ne 0 ]; then
+  echo "❌ Error: Failed to create universal binary with lipo."
+  exit 1
+fi
+chmod +x "$UNIVERSAL_BINARY_PATH"
+echo "✅ Universal binary created and made executable."
+
+# 5. Verify the universal binary contains both architectures
+echo "🔍 Verifying universal binary architectures..."
+lipo -info "$UNIVERSAL_BINARY_PATH"
+
+# 6. Generate the install.sh script with GitHub download logic
 echo "📄 Generating install script at $INSTALL_SCRIPT_DESTINATION..."
 cat << 'EOF' > "$INSTALL_SCRIPT_DESTINATION"
 #!/bin/bash
@@ -54,10 +69,10 @@ BINARY_NAME="rugby"
 DOWNLOAD_URL="https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/$RELEASE_TAG/$BINARY_NAME"
 
 echo "🚀 Rugby Installer for $GITHUB_USER/$GITHUB_REPO, version $RELEASE_TAG"
-echo "Binary name: $BINARY_NAME"
+echo "Binary name: $BINARY_NAME (Universal Binary - supports both x86_64 and arm64)"
 
 # --- Download the binary ---
-echo "📥 Downloading Rugby binary from $DOWNLOAD_URL..."
+echo "📥 Downloading Rugby universal binary from $DOWNLOAD_URL..."
 TMP_DIR=$(mktemp -d)
 if [ -z "$TMP_DIR" ]; then
     echo "❌ Error: Failed to create a temporary directory."
@@ -91,11 +106,19 @@ fi
 echo "🔧 Making the downloaded binary executable..."
 chmod +x "./$BINARY_NAME"
 
+# Verify binary architecture compatibility
+echo "🔍 Verifying binary architecture compatibility..."
+CURRENT_ARCH=$(uname -m)
+if command -v lipo &> /dev/null; then
+    echo "Binary architectures: $(lipo -info "./$BINARY_NAME" 2>/dev/null || echo "Unable to determine")"
+fi
+echo "Current system architecture: $CURRENT_ARCH"
+
 # Verify that the downloaded binary works
 echo "🔍 Verifying that the binary works..."
 if ! ./$BINARY_NAME --version >/dev/null 2>&1; then
   echo "❌ Error: The binary '$BINARY_NAME' does not seem to function correctly."
-  echo "   Verify it is compatible with your system ($(uname -m))."
+  echo "   Verify it is compatible with your system ($CURRENT_ARCH)."
   popd > /dev/null
   exit 1
 fi
@@ -185,13 +208,7 @@ echo "📝 Notes:"
 echo "- This installation of Rugby (version $RELEASE_TAG from $GITHUB_USER/$GITHUB_REPO) will take precedence if other versions are in your PATH."
 echo "- This installation is local to the current user ($USER)."
 EOF
-# 4. Copy and rename the install script
-# echo "📄 Copying install script from $INSTALL_SCRIPT_SOURCE to $INSTALL_SCRIPT_DESTINATION..."
-# cp "$INSTALL_SCRIPT_SOURCE" "$INSTALL_SCRIPT_DESTINATION"
-# if [ $? -ne 0 ]; then
-#  echo "❌ Error: Failed to copy install script."
-#  exit 1
-# fi
+
 chmod +x "$INSTALL_SCRIPT_DESTINATION"
 echo "✅ Install script generated at $INSTALL_SCRIPT_DESTINATION and made executable."
 
