@@ -25,14 +25,17 @@ struct Upload: AsyncParsableCommand {
     @Option(help: "S3 secret key. Can also be set via S3_SECRET_KEY environment variable.")
     var secretKey: String?
 
-    @Flag(help: "Refresh +latest file before uploading.")
-    var refresh = false
+    @Flag(help: "Refresh +latest file before uploading (default: true).")
+    var refresh = true
+    
+    @Flag(name: .customLong("no-refresh"), help: "Skip refreshing +latest file before uploading.")
+    var noRefresh = false
 
     @Flag(help: "Show what would be uploaded without actually uploading.")
     var dryRun = false
 
     @Option(help: "Number of parallel upload processes.")
-    var processes = 10
+    var processes = 15
 
     @Option(help: "Binary archive file type to use: zip or 7z.")
     var archiveType: ArchiveType = .zip
@@ -81,7 +84,7 @@ extension Upload: RunnableCommand {
         
         let s3Config = try resolveS3Configuration()
         
-        if refresh {
+        if refresh && !noRefresh {
             try await uploadManager.refreshLatestFile()
         }
         

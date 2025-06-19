@@ -1,0 +1,40 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rugby-ios}",
+            "name": "Debug rugby",
+            "program": "${workspaceFolder:rugby-ios}/.build/debug/rugby",
+            "preLaunchTask": "swift: Build Debug rugby"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rugby-ios}",
+            "name": "Release rugby",
+            "program": "${workspaceFolder:rugby-ios}/.build/release/rugby",
+            "preLaunchTask": "swift: Build Release rugby"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rugby-ios}",
+            "name": "Debug rugby-s3-uploader",
+            "program": "${workspaceFolder:rugby-ios}/.build/debug/rugby-s3-uploader",
+            "preLaunchTask": "swift: Build Debug rugby-s3-uploader"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rugby-ios}",
+            "name": "Release rugby-s3-uploader",
+            "program": "${workspaceFolder:rugby-ios}/.build/release/rugby-s3-uploader",
+            "preLaunchTask": "swift: Build Release rugby-s3-uploader"
+        }
+    ]
+}

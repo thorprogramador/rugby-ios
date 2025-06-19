@@ -12,7 +12,7 @@ rugby upload [options]
 
 The `upload` command allows you to upload your locally cached Rugby binaries to S3 remote storage. This enables team members to download pre-built binaries using the `warmup` command, significantly speeding up build times.
 
-The command wraps the existing `rugby-s3-uploader.rb` script and provides a native Rugby CLI interface.
+The command provides a native Swift implementation for uploading binaries to S3, with no external Ruby dependencies required.
 
 ## Prerequisites
 
@@ -28,12 +28,6 @@ export S3_SECRET_KEY='your-secret-key'
 ```
 
 ### Dependencies
-
-The upload functionality requires the following Ruby gems:
-
-```bash
-gem install aws-sdk-s3 parallel
-```
 
 For 7zip compression (optional):
 ```bash
@@ -137,14 +131,6 @@ echo $S3_ENDPOINT
 echo $S3_BUCKET
 echo $S3_ACCESS_KEY
 echo $S3_SECRET_KEY
-```
-
-### Missing Ruby Gems
-
-Install required gems:
-
-```bash
-gem install aws-sdk-s3 parallel
 ```
 
 ### 7zip Not Found

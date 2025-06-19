@@ -4,7 +4,10 @@
       "Bash(mv:*)",
       "Bash(ls:*)",
       "Bash(./create-release-package.sh:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Bash(grep:*)",
+      "Bash(chmod:*)"
     ],
     "deny": []
   }
