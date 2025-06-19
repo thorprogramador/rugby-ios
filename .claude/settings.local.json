@@ -3,7 +3,8 @@
     "allow": [
       "Bash(mv:*)",
       "Bash(ls:*)",
-      "Bash(./create-release-package.sh:*)"
+      "Bash(./create-release-package.sh:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

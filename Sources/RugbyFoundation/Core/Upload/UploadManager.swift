@@ -45,16 +45,23 @@ final class UploadManager: Loggable {
     }
     
     private func getRugbyUploaderScriptPath() throws -> String {
-        // Try to get the bundled resource first
-        if let resourceURL = Bundle.main.url(forResource: "rugby-s3-uploader", withExtension: "rb") {
-            return resourceURL.path
+        // For SPM executables, resources are placed in a bundle next to the executable
+        let executableURL = URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
+        let executableDir = executableURL.deletingLastPathComponent()
+        
+        // Check for SPM resource bundle (Rugby_RugbyFoundation.bundle)
+        let bundlePath = executableDir.appendingPathComponent("Rugby_RugbyFoundation.bundle")
+        let scriptInBundle = bundlePath.appendingPathComponent("rugby-s3-uploader.rb")
+        if FileManager.default.fileExists(atPath: scriptInBundle.path) {
+            return scriptInBundle.path
         }
         
-        // Try alternative bundle access for SPM resources
-        let bundle = Bundle(for: type(of: self))
-        if let resourceURL = bundle.url(forResource: "rugby-s3-uploader", withExtension: "rb") {
+        // Try Bundle.module for SPM resources (this works when running from Xcode)
+        #if SWIFT_PACKAGE
+        if let resourceURL = Bundle.module.url(forResource: "rugby-s3-uploader", withExtension: "rb") {
             return resourceURL.path
         }
+        #endif
         
         // Fallback: try to find the ruby script in the project directory (for development)
         let projectPaths = [
@@ -68,9 +75,7 @@ final class UploadManager: Loggable {
                 .appendingPathComponent("rugby-s3-uploader.rb").path,
             
             // Installed path - next to rugby executable  
-            URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
-                .deletingLastPathComponent()
-                .appendingPathComponent("rugby-s3-uploader.rb").path
+            executableDir.appendingPathComponent("rugby-s3-uploader.rb").path
         ]
         
         // Try to find existing script
