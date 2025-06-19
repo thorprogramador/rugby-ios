@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv:*)",
+      "Bash(ls:*)",
+      "Bash(./create-release-package.sh:*)"
+    ],
+    "deny": []
+  }
+}

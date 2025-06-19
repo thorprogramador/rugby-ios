@@ -6,7 +6,7 @@
 # Ensure these are correct for your repository and desired release
 GITHUB_USER="thorprogramador"
 GITHUB_REPO="rugby-ios"
-RELEASE_TAG="3.0.22" # IMPORTANT: Update this tag for new releases!
+RELEASE_TAG="3.0.23" # IMPORTANT: Update this tag for new releases!
 BINARY_NAME="rugby"
 DOWNLOAD_URL="https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/$RELEASE_TAG/$BINARY_NAME"
 
