@@ -3,7 +3,7 @@
 # Script para instalar localmente tu versión modificada de Rugby
 
 # Directorio de instalación
-INSTALL_DIR="$HOME/.rugby/bin"
+INSTALL_DIR="$HOME/.rugby/clt"
 mkdir -p "$INSTALL_DIR"
 
 # Compilar Rugby en modo release

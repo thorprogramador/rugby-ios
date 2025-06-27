@@ -25,7 +25,7 @@ if ! ./rugby --version >/dev/null 2>&1; then
 fi
 
 # Directorio de instalación
-INSTALL_DIR="$HOME/.rugby/bin"
+INSTALL_DIR="$HOME/.rugby/clt"
 mkdir -p "$INSTALL_DIR"
 
 # Eliminar versión anterior si existe

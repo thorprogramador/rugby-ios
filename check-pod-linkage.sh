@@ -147,7 +147,7 @@ main() {
                 ;;
             -r|--root)
                 pods_project="$2/Pods/Pods.xcodeproj/project.pbxproj"
-                rugby_bin_dir="$2/.rugby/bin"
+                rugby_bin_dir="$2/.rugby/clt"
                 shift 2
                 ;;
             -h|--help)

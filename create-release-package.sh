@@ -125,7 +125,7 @@ fi
 echo "✅ Downloaded binary is functional."
 
 # Directorio de instalación
-INSTALL_DIR="$HOME/.rugby/bin"
+INSTALL_DIR="$HOME/.rugby/clt"
 mkdir -p "$INSTALL_DIR"
 
 # Eliminar versión anterior si existe
