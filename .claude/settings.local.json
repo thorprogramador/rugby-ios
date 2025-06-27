@@ -10,7 +10,12 @@
       "Bash(chmod:*)",
       "Bash(swift test:*)",
       "Bash(swift:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(/Users/dambert.munoz/.rugby/clt/rugby --version)",
+      "Bash(/Users/dambert.munoz/.rugby/bin/rugby:*)",
+      "Bash(/Users/dambert.munoz/rappi/rugby-ios/fix_rugby_path.sh:*)",
+      "Bash(source:*)",
+      "Bash(rugby:*)"
     ],
     "deny": []
   }

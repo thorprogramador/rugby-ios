@@ -67,7 +67,7 @@ fi
 echo "✅ Downloaded binary is functional."
 
 # Directorio de instalación
-INSTALL_DIR="$HOME/.rugby/bin"
+INSTALL_DIR="$HOME/.rugby/clt"
 mkdir -p "$INSTALL_DIR"
 
 # Eliminar versión anterior si existe
@@ -109,7 +109,7 @@ fi
 touch "$SHELL_CONFIG_FILE"
 
 PATH_ENTRY_COMMENT="# Rugby PATH entry"
-PATH_STRING="export PATH=\\"$INSTALL_DIR:\\$PATH\\""
+PATH_STRING="export PATH=\"$INSTALL_DIR:\$PATH\""
 
 # Remove old Rugby PATH entries to avoid duplicates and ensure it's at the start
 if grep -q "$PATH_ENTRY_COMMENT" "$SHELL_CONFIG_FILE"; then
@@ -117,14 +117,59 @@ if grep -q "$PATH_ENTRY_COMMENT" "$SHELL_CONFIG_FILE"; then
     # Use a temporary file for sed -i compatibility on macOS
     TMP_SED_FILE_PATH=$(mktemp)
     sed "/$PATH_ENTRY_COMMENT/d" "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
-    sed "/export PATH=\\".*$INSTALL_DIR:\\$PATH\\"/d" "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
+    sed "/export PATH=\".*$INSTALL_DIR:\$PATH\"/d" "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
     # Clean up any empty lines that might result from deletion
     sed '/^$/d' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
     rm -f "$TMP_SED_FILE_PATH"
 fi
 
+# Full cleanup of all Rugby installations and PATH entries
+echo "🧹 Performing full cleanup of all Rugby installations..."
+
+# Remove BOTH rugby/bin and rugby/clt directories
+OLD_BIN_DIR="$HOME/.rugby/bin"
+OLD_CLT_DIR="$HOME/.rugby/clt"
+
+if [ -d "$OLD_BIN_DIR" ]; then
+    echo "   Removing Rugby bin directory at $OLD_BIN_DIR..."
+    rm -rf "$OLD_BIN_DIR"
+fi
+
+if [ -d "$OLD_CLT_DIR" ]; then
+    echo "   Removing Rugby clt directory at $OLD_CLT_DIR..."
+    rm -rf "$OLD_CLT_DIR"
+fi
+
+# Remove ALL Rugby-related PATH exports and entries from shell config
+if [ -f "$SHELL_CONFIG_FILE" ]; then
+    echo "   Cleaning all Rugby PATH entries from $SHELL_CONFIG_FILE..."
+    TMP_SED_FILE_PATH=$(mktemp)
+    
+    # First pass: Remove all export PATH lines containing .rugby
+    grep -v "export PATH=.*\.rugby" "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
+    
+    # Second pass: Remove malformed PATH exports with backslashes
+    sed '/export PATH=\\/d' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
+    
+    # Third pass: Remove Rugby PATH comment lines
+    sed '/# Rugby PATH entry/d' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
+    
+    # Fourth pass: Clean up any remaining .rugby paths from existing PATH exports
+    sed 's|:[^:]*\.rugby/[^:]*||g' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
+    
+    # Clean up any multiple consecutive blank lines
+    sed '/^$/N;/^\n$/d' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
+    
+    rm -f "$TMP_SED_FILE_PATH"
+fi
+
+# Now recreate the clt directory for the new installation
+mkdir -p "$INSTALL_DIR"
+
 echo "🔄 Adding $INSTALL_DIR to your PATH in $SHELL_CONFIG_FILE..."
-echo -e "\\n$PATH_ENTRY_COMMENT\\n$PATH_STRING" >> "$SHELL_CONFIG_FILE"
+echo "" >> "$SHELL_CONFIG_FILE"
+echo "$PATH_ENTRY_COMMENT" >> "$SHELL_CONFIG_FILE"
+echo "$PATH_STRING" >> "$SHELL_CONFIG_FILE"
 echo "✅ Rugby PATH configured. Please restart your terminal or run 'source $SHELL_CONFIG_FILE'."
 
 
