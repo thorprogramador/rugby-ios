@@ -39,11 +39,74 @@ public protocol IUploadManager: AnyObject {
 
 final class UploadManager: Loggable {
     let logger: ILogger
-    private let s3Uploader: RugbyS3Uploader
     
     init(logger: ILogger) {
         self.logger = logger
-        self.s3Uploader = RugbyS3Uploader(logger: logger)
+    }
+    
+    private func getRugbyUploaderScriptPath() throws -> String {
+        // Try to get the bundled resource first
+        if let resourceURL = Bundle.main.url(forResource: "rugby-s3-uploader", withExtension: "rb") {
+            return resourceURL.path
+        }
+        
+        // Try alternative bundle access for SPM resources
+        let bundle = Bundle(for: type(of: self))
+        if let resourceURL = bundle.url(forResource: "rugby-s3-uploader", withExtension: "rb") {
+            return resourceURL.path
+        }
+        
+        // Fallback: try to find the ruby script in the project directory (for development)
+        let projectPaths = [
+            // Development path - in the source tree
+            URL(fileURLWithPath: #file)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("rugby-s3-uploader.rb").path,
+            
+            // Installed path - next to rugby executable  
+            URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
+                .deletingLastPathComponent()
+                .appendingPathComponent("rugby-s3-uploader.rb").path
+        ]
+        
+        // Try to find existing script
+        for path in projectPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        
+        throw UploadManagerError.rubyScriptNotFound("Could not find rugby-s3-uploader.rb in bundle or project")
+    }
+    
+    private func runRugbyUploader(arguments: [String], environment: [String: String] = [:]) async throws {
+        let scriptPath = try getRugbyUploaderScriptPath()
+        
+        // Check if ruby script exists
+        guard FileManager.default.fileExists(atPath: scriptPath) else {
+            throw UploadManagerError.rubyScriptNotFound(scriptPath)
+        }
+        
+        var env = ProcessInfo.processInfo.environment
+        for (key, value) in environment {
+            env[key] = value
+        }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["ruby", scriptPath] + arguments
+        process.environment = env
+        
+        try process.run()
+        process.waitUntilExit()
+        
+        guard process.terminationStatus == 0 else {
+            throw UploadManagerError.rubyScriptFailed("Process failed with exit code \(process.terminationStatus)")
+        }
     }
 }
 
@@ -51,19 +114,49 @@ final class UploadManager: Loggable {
 
 extension UploadManager: IUploadManager {
     func refreshLatestFile() async throws {
-        try await s3Uploader.refreshLatestFile(dryRun: false)
+        await log("🏈 Rugby: Refreshing +latest file with cached binaries...")
+        try await runRugbyUploader(arguments: ["--refresh"])
     }
     
     func upload(s3Config: S3Configuration,
                 dryRun: Bool,
                 processes: Int,
                 archiveType: ArchiveType) async throws {
-        try await s3Uploader.uploadToS3(
-            s3Config: s3Config,
-            dryRun: dryRun,
-            refreshFirst: false, // Already handled by the Upload command
-            processes: processes,
-            archiveType: archiveType
-        )
+        var arguments = ["--upload"]
+        let environment: [String: String] = [
+            "S3_ENDPOINT": s3Config.endpoint,
+            "S3_BUCKET": s3Config.bucket,
+            "S3_ACCESS_KEY": s3Config.accessKey,
+            "S3_SECRET_KEY": s3Config.secretKey
+        ]
+        
+        if dryRun {
+            arguments.append("--dry-run")
+        }
+        
+        arguments.append("--processes")
+        arguments.append("\(processes)")
+        
+        if archiveType == .sevenZip {
+            arguments.append("--7zip")
+        }
+        
+        try await runRugbyUploader(arguments: arguments, environment: environment)
+    }
+}
+
+// MARK: - Errors
+
+enum UploadManagerError: LocalizedError {
+    case rubyScriptNotFound(String)
+    case rubyScriptFailed(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .rubyScriptNotFound(let path):
+            return "Rugby S3 uploader script not found at: \(path)"
+        case .rubyScriptFailed(let output):
+            return "Rugby S3 uploader failed: \(output)"
+        }
     }
 }

@@ -15,7 +15,17 @@
       "Bash(/Users/dambert.munoz/.rugby/bin/rugby:*)",
       "Bash(/Users/dambert.munoz/rappi/rugby-ios/fix_rugby_path.sh:*)",
       "Bash(source:*)",
-      "Bash(rugby:*)"
+      "Bash(rugby:*)",
+      "Bash(aws s3 ls:*)",
+      "Bash(export AWS_ACCESS_KEY_ID='AKIAZ3IXPNL3UXR65F5Q')",
+      "Bash(export:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(zip:*)",
+      "Bash(aws s3 cp:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   }

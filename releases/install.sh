@@ -6,7 +6,7 @@
 # Ensure these are correct for your repository and desired release
 GITHUB_USER="thorprogramador"
 GITHUB_REPO="rugby-ios"
-RELEASE_TAG="3.1.0" # IMPORTANT: Update this tag for new releases!
+RELEASE_TAG="3.1.12" # IMPORTANT: Update this tag for new releases!
 BINARY_NAME="rugby"
 DOWNLOAD_URL="https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/$RELEASE_TAG/$BINARY_NAME"
 
@@ -68,13 +68,24 @@ echo "✅ Downloaded binary is functional."
 
 # Directorio de instalación
 INSTALL_DIR="$HOME/.rugby/clt"
+mkdir -p "$INSTALL_DIR"
 
-# Store the downloaded binary path before cleanup
-DOWNLOADED_BINARY_PATH="$(pwd)/$BINARY_NAME"
+# Eliminar versión anterior si existe
+if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+  echo "🗑️  Removing previous version of Rugby from $INSTALL_DIR/$BINARY_NAME..."
+  rm "$INSTALL_DIR/$BINARY_NAME"
+fi
 
-# Clean up by exiting the temporary directory first
+# Copiar el binario
+echo "📦 Installing Rugby to $INSTALL_DIR/$BINARY_NAME..."
+cp "./$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+chmod +x "$INSTALL_DIR/$BINARY_NAME"
+
+# Clean up by exiting the temporary directory (handled by popd before trap or here)
 popd > /dev/null
 # TMP_DIR will be removed by the trap
+
+echo "✅ Rugby ($BINARY_NAME) version $RELEASE_TAG installed successfully to $INSTALL_DIR."
 
 # Agregar al PATH si no está (al principio para que tome precedencia)
 SHELL_CONFIG_FILE=""
@@ -98,7 +109,7 @@ fi
 touch "$SHELL_CONFIG_FILE"
 
 PATH_ENTRY_COMMENT="# Rugby PATH entry"
-PATH_STRING="export PATH=\"$INSTALL_DIR:\$PATH\""
+PATH_STRING="export PATH=\\"$INSTALL_DIR:\\$PATH\\""
 
 # Remove old Rugby PATH entries to avoid duplicates and ensure it's at the start
 if grep -q "$PATH_ENTRY_COMMENT" "$SHELL_CONFIG_FILE"; then
@@ -106,93 +117,28 @@ if grep -q "$PATH_ENTRY_COMMENT" "$SHELL_CONFIG_FILE"; then
     # Use a temporary file for sed -i compatibility on macOS
     TMP_SED_FILE_PATH=$(mktemp)
     sed "/$PATH_ENTRY_COMMENT/d" "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
-    sed "/export PATH=\".*$INSTALL_DIR:\$PATH\"/d" "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
+    sed "/export PATH=\\".*$INSTALL_DIR:\\$PATH\\"/d" "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
     # Clean up any empty lines that might result from deletion
     sed '/^$/d' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
     rm -f "$TMP_SED_FILE_PATH"
 fi
 
-# Full cleanup of all Rugby installations and PATH entries
-echo "🧹 Performing full cleanup of all Rugby installations..."
-
-# Remove BOTH rugby/bin and rugby/clt directories
-OLD_BIN_DIR="$HOME/.rugby/bin"
-OLD_CLT_DIR="$HOME/.rugby/clt"
-
-if [ -d "$OLD_BIN_DIR" ]; then
-    echo "   Removing Rugby bin directory at $OLD_BIN_DIR..."
-    rm -rf "$OLD_BIN_DIR"
-fi
-
-if [ -d "$OLD_CLT_DIR" ]; then
-    echo "   Removing Rugby clt directory at $OLD_CLT_DIR..."
-    rm -rf "$OLD_CLT_DIR"
-fi
-
-# Remove ALL Rugby-related PATH exports and entries from shell config
-if [ -f "$SHELL_CONFIG_FILE" ]; then
-    echo "   Cleaning all Rugby PATH entries from $SHELL_CONFIG_FILE..."
-    TMP_SED_FILE_PATH=$(mktemp)
-    
-    # First pass: Remove all export PATH lines containing .rugby
-    grep -v "export PATH=.*\.rugby" "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
-    
-    # Second pass: Remove malformed PATH exports with backslashes
-    sed '/export PATH=\\/d' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
-    
-    # Third pass: Remove Rugby PATH comment lines
-    sed '/# Rugby PATH entry/d' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
-    
-    # Fourth pass: Clean up any remaining .rugby paths from existing PATH exports
-    sed 's|:[^:]*\.rugby/[^:]*||g' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
-    
-    # Clean up any multiple consecutive blank lines
-    sed '/^$/N;/^\n$/d' "$SHELL_CONFIG_FILE" > "$TMP_SED_FILE_PATH" && mv "$TMP_SED_FILE_PATH" "$SHELL_CONFIG_FILE"
-    
-    rm -f "$TMP_SED_FILE_PATH"
-fi
-
-# Now recreate the clt directory for the new installation
-mkdir -p "$INSTALL_DIR"
-
-# Copy the binary to the installation directory
-echo "📦 Installing Rugby to $INSTALL_DIR/$BINARY_NAME..."
-if [ -f "$DOWNLOADED_BINARY_PATH" ]; then
-    cp "$DOWNLOADED_BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"
-    chmod +x "$INSTALL_DIR/$BINARY_NAME"
-    echo "✅ Rugby ($BINARY_NAME) version $RELEASE_TAG installed successfully to $INSTALL_DIR."
-else
-    echo "❌ Error: Downloaded binary not found at $DOWNLOADED_BINARY_PATH"
-    exit 1
-fi
-
 echo "🔄 Adding $INSTALL_DIR to your PATH in $SHELL_CONFIG_FILE..."
-echo "" >> "$SHELL_CONFIG_FILE"
-echo "$PATH_ENTRY_COMMENT" >> "$SHELL_CONFIG_FILE"
-echo "$PATH_STRING" >> "$SHELL_CONFIG_FILE"
+echo -e "\\n$PATH_ENTRY_COMMENT\\n$PATH_STRING" >> "$SHELL_CONFIG_FILE"
 echo "✅ Rugby PATH configured. Please restart your terminal or run 'source $SHELL_CONFIG_FILE'."
 
 
 echo "📋 You can now run Rugby with the command: $BINARY_NAME"
 
-# Verify the installation by checking the version directly
+# Verify the installation by checking the version using the (potentially) new PATH
 echo ""
-echo "🔍 Verifying installation..."
-if [ -f "$INSTALL_DIR/$BINARY_NAME" ] && [ -x "$INSTALL_DIR/$BINARY_NAME" ]; then
-    INSTALLED_VERSION=$("$INSTALL_DIR/$BINARY_NAME" --version 2>/dev/null)
-    if [ $? -eq 0 ]; then
-        echo "✅ Verification successful: Rugby version $INSTALLED_VERSION installed at $INSTALL_DIR/$BINARY_NAME"
-    else
-        echo "⚠️  Rugby binary installed but unable to get version. Try running '$INSTALL_DIR/$BINARY_NAME --version' directly."
-    fi
+echo "🔍 Verifying installation (using updated PATH in current session for check)..."
+export PATH="$INSTALL_DIR:$PATH" # Update PATH for current script session
+if command -v $BINARY_NAME &> /dev/null; then
+    echo "✅ Verification successful: $($BINARY_NAME --version)"
 else
-    echo "❌ Verification failed. Rugby binary not found at expected location: $INSTALL_DIR/$BINARY_NAME"
+    echo "❌ Verification failed. Try running 'source $SHELL_CONFIG_FILE' and then '$BINARY_NAME --version'."
 fi
-echo ""
-echo "📝 To use Rugby, either:"
-echo "   1. Restart your terminal, or"
-echo "   2. Run: source $SHELL_CONFIG_FILE"
-echo "   Then you can use: $BINARY_NAME --version"
 
 echo ""
 echo "🚀 Example usage:"
