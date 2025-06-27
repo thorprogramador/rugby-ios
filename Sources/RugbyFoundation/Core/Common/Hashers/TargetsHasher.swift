@@ -45,7 +45,9 @@ final class TargetsHasher {
         guard target.hash == nil else { return }
 
         var dependencyHashes: [String: String?] = [:]
-        for dependency in target.dependencies.values {
+        // Use only explicit (direct) dependencies for hash calculation
+        // This prevents cascading hash changes when nested dependencies change
+        for dependency in target.explicitDependencies.values {
             try await hash(dependency)
             dependencyHashes.updateValue(dependency.hash, forKey: dependency.name)
         }

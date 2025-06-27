@@ -135,7 +135,19 @@ public final class Vault {
                 envVariablesResolver: envVariablesResolver
             ),
             cocoaPodsScriptsHasher: CocoaPodsScriptsHasher(fileContentHasher: fileContentHasher),
-            configurationsHasher: ConfigurationsHasher(excludeKeys: [settings.hasBackupKey]),
+            configurationsHasher: ConfigurationsHasher(excludeKeys: [
+                settings.hasBackupKey,
+                // Exclude path-related build settings that vary between CI/CD environments
+                "PODS_ROOT",
+                "PODS_CONFIGURATION_BUILD_DIR",
+                "PODS_XCFRAMEWORKS_BUILD_DIR",
+                "CONFIGURATION_BUILD_DIR",
+                "BUILT_PRODUCTS_DIR",
+                "TARGET_BUILD_DIR",
+                "SYMROOT",
+                "OBJROOT",
+                "DSTROOT"
+            ]),
             productHasher: ProductHasher(),
             buildRulesHasher: BuildRulesHasher(foundationHasher: foundationHasher,
                                                fileContentHasher: fileContentHasher)
