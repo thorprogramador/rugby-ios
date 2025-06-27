@@ -53,12 +53,35 @@ public final class RugbyS3Uploader: Loggable {
         if !dryRun {
             // Backup existing +latest file if it exists
             if FileManager.default.fileExists(atPath: latestBinariesPath) {
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
-                let timestamp = dateFormatter.string(from: Date())
-                let backupFile = "\(latestBinariesPath).backup.\(timestamp)"
-                try FileManager.default.copyItem(atPath: latestBinariesPath, toPath: backupFile)
-                await log("💾 Backed up existing +latest file to: \(URL(fileURLWithPath: backupFile).lastPathComponent)")
+                // Always use microsecond precision to avoid timestamp conflicts
+                let microTimestamp = String(format: "%.6f", Date().timeIntervalSince1970).replacingOccurrences(of: ".", with: "")
+                let backupFile = "\(latestBinariesPath).backup.\(microTimestamp)"
+                
+                // Force remove any existing backup file with same name
+                try? FileManager.default.removeItem(atPath: backupFile)
+                
+                do {
+                    try FileManager.default.copyItem(atPath: latestBinariesPath, toPath: backupFile)
+                    await log("💾 Backed up existing +latest file to: \(URL(fileURLWithPath: backupFile).lastPathComponent)")
+                } catch {
+                    // Fallback: try with additional random suffix
+                    let randomSuffix = String(Int.random(in: 1000...9999))
+                    let fallbackBackupFile = "\(latestBinariesPath).backup.\(microTimestamp).\(randomSuffix)"
+                    try? FileManager.default.removeItem(atPath: fallbackBackupFile)
+                    
+                    do {
+                        try FileManager.default.copyItem(atPath: latestBinariesPath, toPath: fallbackBackupFile)
+                        await log("💾 Backed up existing +latest file to: \(URL(fileURLWithPath: fallbackBackupFile).lastPathComponent)")
+                    } catch {
+                        await log("⚠️ Warning: Could not create backup file, continuing without backup: \(error.localizedDescription)")
+                    }
+                }
+            }
+            
+            // Remove existing +latest file before writing new content
+            if FileManager.default.fileExists(atPath: latestBinariesPath) {
+                try? FileManager.default.removeItem(atPath: latestBinariesPath)
+                await log("🗑️ Removed existing +latest file")
             }
             
             // Write all binary paths to +latest file
@@ -782,7 +805,7 @@ public final class RugbyS3Uploader: Loggable {
         resultHeaders["x-amz-content-sha256"] = payloadHash
         
         // Enhanced debug logging for signature validation
-        if method == "HEAD" || ProcessInfo.processInfo.environment["RUGBY_DEBUG_S3"] != nil {
+        if ProcessInfo.processInfo.environment["RUGBY_DEBUG_S3"] != nil {
             print("🔐 AWS Signature V4 Debug:")
             print("   Method: \(method)")
             print("   Path: \(encodedPath)")

@@ -61,7 +61,7 @@ extension UploadManager: IUploadManager {
         try await s3Uploader.uploadToS3(
             s3Config: s3Config,
             dryRun: dryRun,
-            refreshFirst: false, // Already handled by the Upload command
+            refreshFirst: true, // Already handled by the Upload command
             processes: processes,
             archiveType: archiveType
         )
