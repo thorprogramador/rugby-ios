@@ -169,10 +169,7 @@ public final class RugbyS3Uploader: Loggable {
         if endpointContainsBucketInPath {
             cleanEndpoint = String(pathComponents.dropLast().joined(separator: "/"))
         }
-        
-        // Check if endpoint already contains the bucket name in subdomain
-        let endpointContainsBucket = cleanEndpoint.hasPrefix("\(s3Config.bucket).") || endpointContainsBucketInPath
-        
+
         // Extract region from endpoint
         let region = extractRegionFromEndpoint(s3Config.endpoint)
         
@@ -370,6 +367,17 @@ public final class RugbyS3Uploader: Loggable {
         
         await log("🔐 Signing request with path: \(path), host: \(host)")
         
+        // Validate signature inputs before proceeding
+        let headersForValidation = [
+            "host": host,
+            "x-amz-date": dateString
+        ]
+        
+        if !validateSignature(method: "HEAD", path: path, headers: headersForValidation, config: config, region: region) {
+            await log("❌ Signature validation failed")
+            return false
+        }
+        
         let signedHeaders = signRequest(
             method: "HEAD",
             path: path,
@@ -391,9 +399,28 @@ public final class RugbyS3Uploader: Loggable {
         }
         
         do {
-            let (_, response) = try await uploadSession.data(for: request)
+            let (data, response) = try await uploadSession.data(for: request)
             if let httpResponse = response as? HTTPURLResponse {
                 await log("📡 S3 HEAD response status: \(httpResponse.statusCode)")
+                
+                // Log response headers for debugging
+                if ProcessInfo.processInfo.environment["RUGBY_DEBUG_S3"] != nil {
+                    await log("📡 Response headers:")
+                    for (key, value) in httpResponse.allHeaderFields {
+                        await log("   \(key): \(value)")
+                    }
+                }
+                
+                // Check for authentication errors
+                if httpResponse.statusCode == 403 {
+                    await log("❌ S3 Authentication failed - check your credentials and signature")
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        await log("❌ S3 Error response: \(responseString)")
+                    }
+                } else if httpResponse.statusCode == 404 {
+                    await log("⚠️  S3 bucket not found or no access - this might be expected for testing")
+                }
+                
                 return (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 404
             }
             return false
@@ -576,6 +603,19 @@ public final class RugbyS3Uploader: Loggable {
         let dateString = httpDateString()
         request.setValue(dateString, forHTTPHeaderField: "x-amz-date")
         
+        // Validate signature inputs before proceeding
+        let headersForValidation = [
+            "host": host,
+            "content-type": contentType,
+            "content-length": "\(data.count)",
+            "x-amz-date": dateString
+        ]
+        
+        if !validateSignature(method: "PUT", path: path, headers: headersForValidation, config: config, region: region) {
+            await log("❌ Upload signature validation failed for key: \(key)")
+            return false
+        }
+        
         // Sign the request
         let signedHeaders = signRequest(
             method: "PUT",
@@ -600,10 +640,32 @@ public final class RugbyS3Uploader: Loggable {
         }
         
         do {
-            let (_, response) = try await uploadSession.data(for: request)
+            let (data, response) = try await uploadSession.data(for: request)
             if let httpResponse = response as? HTTPURLResponse {
                 if !(200...299).contains(httpResponse.statusCode) {
                     await log("❌ S3 upload failed with status: \(httpResponse.statusCode) for key: \(key)")
+                    
+                    // Log detailed error information
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        await log("❌ S3 Error response: \(responseString)")
+                    }
+                    
+                    // Log response headers for debugging authentication issues
+                    if ProcessInfo.processInfo.environment["RUGBY_DEBUG_S3"] != nil {
+                        await log("📡 Response headers:")
+                        for (headerKey, value) in httpResponse.allHeaderFields {
+                            await log("   \(headerKey): \(value)")
+                        }
+                    }
+                    
+                    // Check for specific error types
+                    if httpResponse.statusCode == 403 {
+                        await log("❌ Authentication failed - check your S3 credentials and signature")
+                    } else if httpResponse.statusCode == 404 {
+                        await log("❌ Bucket not found - check your bucket name and region")
+                    } else if httpResponse.statusCode == 400 {
+                        await log("❌ Bad request - check your request format")
+                    }
                 }
                 return (200...299).contains(httpResponse.statusCode)
             }
@@ -615,6 +677,14 @@ public final class RugbyS3Uploader: Loggable {
     }
     
     // MARK: - AWS Signature V4
+    
+    private func urlEncodePath(_ path: String) -> String {
+        // AWS signature requires specific URL encoding for paths
+        // - Don't encode forward slashes
+        // - Encode everything else that needs encoding
+        let allowedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~/")
+        return path.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? path
+    }
     
     private func httpDateString() -> String {
         let formatter = DateFormatter()
@@ -632,15 +702,32 @@ public final class RugbyS3Uploader: Loggable {
         region: String,
         service: String
     ) -> [String: String] {
+        // Validate inputs
+        guard !method.isEmpty, !path.isEmpty, !region.isEmpty, !service.isEmpty else {
+            print("❌ Invalid signature parameters: method=\(method), path=\(path), region=\(region), service=\(service)")
+            return headers
+        }
+        
+        guard !config.accessKey.isEmpty, !config.secretKey.isEmpty else {
+            print("❌ Invalid S3 credentials: accessKey and secretKey cannot be empty")
+            return headers
+        }
+        
         let dateString = headers["x-amz-date"] ?? httpDateString()
         let dateStamp = String(dateString.prefix(8))
         
-        // Create canonical request
-        let canonicalHeaders = headers.sorted { $0.key < $1.key }
-            .map { "\($0.key.lowercased()):\($0.value.trimmingCharacters(in: .whitespaces))" }
-            .joined(separator: "\n")
+        // URL encode the path for AWS signature
+        let encodedPath = urlEncodePath(path)
         
-        let signedHeaders = headers.keys.sorted().map { $0.lowercased() }.joined(separator: ";")
+        // Create canonical request - headers must be lowercase and sorted
+        let sortedHeaders = headers.sorted { $0.key.lowercased() < $1.key.lowercased() }
+        let canonicalHeaders = sortedHeaders
+            .map { "\($0.key.lowercased()):\($0.value.trimmingCharacters(in: .whitespacesAndNewlines))" }
+            .joined(separator: "\n") + "\n" // Must end with newline
+        
+        let signedHeaders = sortedHeaders
+            .map { $0.key.lowercased() }
+            .joined(separator: ";")
         
         let payloadHash = SHA256.hash(data: payload)
             .compactMap { String(format: "%02x", $0) }
@@ -648,10 +735,9 @@ public final class RugbyS3Uploader: Loggable {
         
         let canonicalRequest = [
             method,
-            path,
-            "", // query string
+            encodedPath,
+            "", // query string (empty for our use case)
             canonicalHeaders,
-            "",
             signedHeaders,
             payloadHash
         ].joined(separator: "\n")
@@ -682,6 +768,12 @@ public final class RugbyS3Uploader: Loggable {
             .compactMap { String(format: "%02x", $0) }
             .joined()
         
+        // Validate the generated signature
+        if !validateSignatureFormat(signature) {
+            print("❌ Generated invalid signature: \(signature)")
+            return headers
+        }
+        
         // Create authorization header
         let authorization = "AWS4-HMAC-SHA256 Credential=\(config.accessKey)/\(credentialScope), SignedHeaders=\(signedHeaders), Signature=\(signature)"
         
@@ -689,11 +781,19 @@ public final class RugbyS3Uploader: Loggable {
         resultHeaders["Authorization"] = authorization
         resultHeaders["x-amz-content-sha256"] = payloadHash
         
-        // Debug logging
-        if method == "HEAD" {
-            print("🔐 Canonical Request:\n\(canonicalRequest)")
-            print("🔐 String to Sign:\n\(stringToSign)")
-            print("🔐 Authorization: \(authorization)")
+        // Enhanced debug logging for signature validation
+        if method == "HEAD" || ProcessInfo.processInfo.environment["RUGBY_DEBUG_S3"] != nil {
+            print("🔐 AWS Signature V4 Debug:")
+            print("   Method: \(method)")
+            print("   Path: \(encodedPath)")
+            print("   Region: \(region)")
+            print("   Date: \(dateString)")
+            print("   Canonical Headers: \(canonicalHeaders.replacingOccurrences(of: "\n", with: "\\n"))")
+            print("   Signed Headers: \(signedHeaders)")
+            print("   Payload Hash: \(payloadHash)")
+            print("   Canonical Request Hash: \(canonicalRequestHash)")
+            print("   String to Sign: \(stringToSign.replacingOccurrences(of: "\n", with: "\\n"))")
+            print("   Authorization: \(authorization)")
         }
         
         return resultHeaders
@@ -717,6 +817,84 @@ public final class RugbyS3Uploader: Loggable {
         let kService = hmacSHA256(key: kRegion, data: Data(serviceName.utf8))
         let kSigning = hmacSHA256(key: kService, data: Data("aws4_request".utf8))
         return kSigning
+    }
+    
+    // MARK: - Signature Validation
+    
+    private func validateSignature(
+        method: String,
+        path: String,
+        headers: [String: String],
+        config: S3Configuration,
+        region: String
+    ) -> Bool {
+        // Check required headers
+        let requiredHeaders = ["host", "x-amz-date"]
+        for header in requiredHeaders {
+            if headers[header]?.isEmpty != false {
+                print("❌ Missing required header: \(header)")
+                return false
+            }
+        }
+        
+        // Validate date format
+        if let dateString = headers["x-amz-date"] {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+            formatter.timeZone = TimeZone(abbreviation: "UTC")
+            if formatter.date(from: dateString) == nil {
+                print("❌ Invalid date format in x-amz-date header: \(dateString)")
+                return false
+            }
+        }
+        
+        // Validate credentials
+        if config.accessKey.isEmpty || config.secretKey.isEmpty {
+            print("❌ Empty S3 credentials")
+            return false
+        }
+        
+        // Validate path
+        if !path.hasPrefix("/") {
+            print("❌ Path must start with '/': \(path)")
+            return false
+        }
+        
+        return true
+    }
+    
+    private func validateSignatureFormat(_ signature: String) -> Bool {
+        // AWS signatures should be exactly 64 characters (256 bits in hex)
+        guard signature.count == 64 else {
+            print("❌ Invalid signature length: \(signature.count), expected 64")
+            return false
+        }
+        
+        // Should only contain lowercase hex characters
+        let hexPattern = "^[a-f0-9]+$"
+        let regex = try? NSRegularExpression(pattern: hexPattern)
+        let range = NSRange(location: 0, length: signature.count)
+        let matches = regex?.matches(in: signature, range: range) ?? []
+        
+        if matches.isEmpty {
+            print("❌ Invalid signature format: contains non-hex characters")
+            return false
+        }
+        
+        return true
+    }
+    
+    // MARK: - Debug Methods
+    
+    /// Enable debug mode for S3 signature validation
+    /// Set RUGBY_DEBUG_S3 environment variable or call this method
+    public func enableDebugMode() {
+        setenv("RUGBY_DEBUG_S3", "1", 1)
+    }
+    
+    /// Disable debug mode for S3 signature validation
+    public func disableDebugMode() {
+        unsetenv("RUGBY_DEBUG_S3")
     }
 }
 

@@ -25,7 +25,8 @@
       "Bash(cp:*)",
       "Bash(zip:*)",
       "Bash(aws s3 cp:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(~/bin/rugby-test:*)"
     ],
     "deny": []
   }
