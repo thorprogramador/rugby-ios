@@ -68,24 +68,13 @@ echo "✅ Downloaded binary is functional."
 
 # Directorio de instalación
 INSTALL_DIR="$HOME/.rugby/clt"
-mkdir -p "$INSTALL_DIR"
 
-# Eliminar versión anterior si existe
-if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-  echo "🗑️  Removing previous version of Rugby from $INSTALL_DIR/$BINARY_NAME..."
-  rm "$INSTALL_DIR/$BINARY_NAME"
-fi
+# Store the downloaded binary path before cleanup
+DOWNLOADED_BINARY_PATH="$(pwd)/$BINARY_NAME"
 
-# Copiar el binario
-echo "📦 Installing Rugby to $INSTALL_DIR/$BINARY_NAME..."
-cp "./$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
-chmod +x "$INSTALL_DIR/$BINARY_NAME"
-
-# Clean up by exiting the temporary directory (handled by popd before trap or here)
+# Clean up by exiting the temporary directory first
 popd > /dev/null
 # TMP_DIR will be removed by the trap
-
-echo "✅ Rugby ($BINARY_NAME) version $RELEASE_TAG installed successfully to $INSTALL_DIR."
 
 # Agregar al PATH si no está (al principio para que tome precedencia)
 SHELL_CONFIG_FILE=""
@@ -166,6 +155,17 @@ fi
 # Now recreate the clt directory for the new installation
 mkdir -p "$INSTALL_DIR"
 
+# Copy the binary to the installation directory
+echo "📦 Installing Rugby to $INSTALL_DIR/$BINARY_NAME..."
+if [ -f "$DOWNLOADED_BINARY_PATH" ]; then
+    cp "$DOWNLOADED_BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"
+    chmod +x "$INSTALL_DIR/$BINARY_NAME"
+    echo "✅ Rugby ($BINARY_NAME) version $RELEASE_TAG installed successfully to $INSTALL_DIR."
+else
+    echo "❌ Error: Downloaded binary not found at $DOWNLOADED_BINARY_PATH"
+    exit 1
+fi
+
 echo "🔄 Adding $INSTALL_DIR to your PATH in $SHELL_CONFIG_FILE..."
 echo "" >> "$SHELL_CONFIG_FILE"
 echo "$PATH_ENTRY_COMMENT" >> "$SHELL_CONFIG_FILE"
@@ -175,15 +175,24 @@ echo "✅ Rugby PATH configured. Please restart your terminal or run 'source $SH
 
 echo "📋 You can now run Rugby with the command: $BINARY_NAME"
 
-# Verify the installation by checking the version using the (potentially) new PATH
+# Verify the installation by checking the version directly
 echo ""
-echo "🔍 Verifying installation (using updated PATH in current session for check)..."
-export PATH="$INSTALL_DIR:$PATH" # Update PATH for current script session
-if command -v $BINARY_NAME &> /dev/null; then
-    echo "✅ Verification successful: $($BINARY_NAME --version)"
+echo "🔍 Verifying installation..."
+if [ -f "$INSTALL_DIR/$BINARY_NAME" ] && [ -x "$INSTALL_DIR/$BINARY_NAME" ]; then
+    INSTALLED_VERSION=$("$INSTALL_DIR/$BINARY_NAME" --version 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        echo "✅ Verification successful: Rugby version $INSTALLED_VERSION installed at $INSTALL_DIR/$BINARY_NAME"
+    else
+        echo "⚠️  Rugby binary installed but unable to get version. Try running '$INSTALL_DIR/$BINARY_NAME --version' directly."
+    fi
 else
-    echo "❌ Verification failed. Try running 'source $SHELL_CONFIG_FILE' and then '$BINARY_NAME --version'."
+    echo "❌ Verification failed. Rugby binary not found at expected location: $INSTALL_DIR/$BINARY_NAME"
 fi
+echo ""
+echo "📝 To use Rugby, either:"
+echo "   1. Restart your terminal, or"
+echo "   2. Run: source $SHELL_CONFIG_FILE"
+echo "   Then you can use: $BINARY_NAME --version"
 
 echo ""
 echo "🚀 Example usage:"
